@@ -1,0 +1,209 @@
+# Funciones con nombre
+
+## Introducción
+
+Dentro de un modulo, podemos definir funciones con `def/2` y funciones privadas con `defp/2`. Una funcion definida con `def/2` puede ser invocada por otros modulos mientras que una funcion privada solo puede ser invocada localmente.
+
+```elixir
+defmodule Math do
+  def sum(a, b) do
+    do_sum(a, b)
+  end
+
+  defp do_sum(a, b) do
+    a + b
+  end
+end
+
+IO.puts(Math.sum(1, 2))
+```
+
+```elixir
+IO.puts(Math.do_sum(1, 2))
+```
+
+La declaracion de funciones tambien soportan guardas y multiples clausulas. Si una funcion tiene varias clausulas, Elixir intentara ejecutar cada clausula hasta que consiga la primera que coincida. Aca podras encontrar una implementacion de una funcion que verifica si el numero dado es cero o no:
+
+```elixir
+defmodule Math do
+  def zero?(0) do
+    true
+  end
+
+  def zero?(x) when is_integer(x) do
+    false
+  end
+end
+
+IO.puts(Math.zero?(0))
+```
+
+```elixir
+IO.puts(Math.zero?(1))
+```
+
+```elixir
+IO.puts(Math.zero?([1, 2, 3]))
+```
+
+```elixir
+IO.puts(Math.zero?(0.0))
+```
+
+NOTA: El signo de interrogacion en el nombre de la funcion `zero?` significa que retorna un valor booleano, y es otra convencion en desarrolladores Elixir, ve [Naming Conventions](https://hexdocs.pm/elixir/main/naming-conventions.html#trailing-question-mark-foo).
+
+Dado un argumento que no coincide con ninguna de las clausulas genera un error.
+
+De manera similar a otros constructos como `if`, las funciones con nombre soportan tanto la sintaxis `do`-block como `do:`. Lo que quiere decir que podemos editar el fichero `match.exs` para que se vea del siguiente modo:
+
+```elixir
+defmodule Math do
+  def zero?(0), do: true
+  def zero?(x) when is_integer(x), do: false
+end
+```
+
+Y se comportara de la misma manera. Puedes usar `do:` para funciones de una linea o one-lines, pero siempre usar `do`-blocks para funciones que ocupan multiples lineas. Si prefieres ser consistente, puedes usar solo bloques `do` en tu codigo.
+
+## Captura de funciones
+
+A lo largo de estas clases, hemos venido usando la notacion `name/arity` para referirnos a funciones. Sucede que esta notacion puede ser usada para recuperar una funcion con nombre como un tipo de funcion. Veamos lo que esto significa, comienza `iex`, ejecutando el fichero `math.exs` definido previamente:
+
+```console
+iex math.exs
+```
+
+```elixir
+Math.zero?(0)
+```
+
+```elixir
+fun = &Math.zero?/1
+```
+
+```elixir
+is_function(fun)
+```
+
+```elixir
+fun.(0)
+```
+
+Recuerda que Elixir hace distincion entre funciones anonimas y funciones con nombre, donde la primera debe ser ejecutada con un punto (`.`) en medio del nombre de la variable y los parentesis. El operador de captura (`&`) permite que funciones con nombre sean asignadas a variables y sean pasadas como argumentos de la misma manera en la que asignamos, invocamos y pasamos funciones anonimas.
+
+Tambien podemos captura operadores:
+
+```elixir
+add = &+/2
+add.(1, 2)
+```
+
+Nota que la sintaxis de captura tambien puede ser usada como atajo para crear funciones:
+
+```elixir
+fun = &(&1 + 1)
+fun.(1)
+```
+
+```elixir
+fun2 = &"Good #{&1}"
+fun2.("morning")
+```
+
+El `&1` representa el primer argumento pasado a la funcion. El `&(&1 + 1)` de arriba es equivalente a `fn x -> x + 1 end`. La sintaxis de arriba es util para crear funciones cortas.
+
+Puedes leer mas como el operador de captura `&` en [la documentacion de `Kernel.SpecialForms`](https://hexdocs.pm/elixir/Kernel.SpecialForms.html#&/1).
+
+## Argumentos por omisión
+
+Las funciones con nombre en Elixir tambien soportan argumentos por omision:
+
+```elixir
+defmodule Concat do
+  def join(a, b, sep \\ " ") do
+    a <> sep <> b
+  end
+end
+
+IO.puts(Concat.join("Hello", "world"))
+IO.puts(Concat.join("Hello", "world", "_"))
+```
+
+Cualquier expresión es permitida como valor por omisión, pero no será evaluada durante la definición de la función. Cada vez que la función es invocada y cualquiera de sus valores por omisión tenga que usarse, la expresión para ese valor por omisión sera evaluada.
+
+```elixir
+defmodule DefaultTest do
+  def dowork(x \\ "hello") do
+    x
+  end
+end
+```
+
+```elixir
+DefaultTest.dowork()
+```
+
+```elixir
+DefaultTest.dowork(123)
+```
+
+```elixir
+DefaultTest.dowork()
+```
+
+Si una funcion con valores por omision tiene multiples clausulas, es requerido que crees una "funcion cabecera", una definicion de funcion pero sin cuerpo, para declarar los valores por omision:
+
+```elixir
+defmodule Concat do
+  # A function head declaring defaults
+  def join(a, b \\ nil, sep \\ " ")
+
+  def join(a, b, _sep) when is_nil(b) do
+    a
+  end
+
+  def join(a, b, sep) do
+    a <> sep <> b
+  end
+end
+
+IO.puts(Concat.join("Hello", "world"))
+IO.puts(Concat.join("Hello", "world", "_"))
+IO.puts(Concat.join("Hello"))
+```
+
+NOTA: El guion bajo antes de `_sep` significa que la variable sera ignorada en esta funcion, vea [Naming Conventions](https://hexdocs.pm/elixir/main/naming-conventions.html#underscore-_foo).
+
+Cuando uses valores por omision, debemos ser cuidadosos y evitar superponer definiciones de funciones. Considera lo suguiente:
+
+```elixir
+defmodule Concat do
+  def join(a, b) do
+    IO.puts("***First join")
+    a <> b
+  end
+
+  def join(a, b, sep \\ " ") do
+    IO.puts("***Second join")
+    a <> sep <> b
+  end
+end
+```
+
+El compilador nos esta diciendo que al invocar la funcion `join` con dos argumentos siempre seleccionara la primera definicion de `join` mientras que la segunda definicion solo sera invocada cuando se provean tres argumentos:
+
+```console
+iex concat.ex
+```
+
+```elixir
+Concat.join("Hello", "world")
+```
+
+```elixir
+Concat.join("Hello", "world", "_")
+```
+
+Removiendo el argumento por omision, evitara la advertencia dada por el compilador en este caso.
+
+En las siguientes clases, aprenderemos como usar funciones con nombres para recursion, exploraremos directivas en Elixir que nos permitiran importar funciones desde otros modulos y discutiremos atributos de modulos.
